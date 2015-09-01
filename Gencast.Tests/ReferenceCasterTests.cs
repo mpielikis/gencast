@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.IO;
+using Microsoft.CodeAnalysis.MSBuild;
 
 namespace Netmf.Plus.Tests
 {
@@ -69,43 +70,142 @@ namespace Netmf.Plus.Tests
 
             var assemblyPath = Path.GetDirectoryName(typeof(object).Assembly.Location);
 
-            var compilation = CSharpCompilation.Create("HelloWorld")
-                .AddReferences(MetadataReference.CreateFromFile(Path.Combine(assemblyPath, "mscorlib.dll")))
-                .AddSyntaxTrees(tree);
+            var ws = MSBuildWorkspace.Create();
+
+            var open = ws.OpenSolutionAsync(@"..\..\sample\Solution1\Solution1.sln");
+
+            open.Wait();
+
+            var solution = open.Result;
+
+            var prj = solution.Projects.Single(x => x.Name == "Project1");
+
+            var getCompilation = prj.GetCompilationAsync();
+
+            getCompilation.Wait();
+
+            var compilation = getCompilation.Result;
+
+            //var compilation = CSharpCompilation.Create("HelloWorld")
+            //    .AddReferences(MetadataReference.CreateFromFile(Path.Combine(assemblyPath, "mscorlib.dll")))
+            //    .AddSyntaxTrees(tree);
+                        
+            var c = Microsoft.CodeAnalysis.MSBuild.MSBuildWorkspace.Create();
+
+            
+            //p.AddMetadataReference(MetadataReference.CreateFromFile(Path.Combine(assemblyPath, "mscorlib.dll")));
+            //p.AddDocument("A.cs", tree.GetRoot());
+
+            //p.GetCompilationAsync();
 
             // 3. Take the Semantic model of compiled tree
 
-            var semanticModel = compilation.GetSemanticModel(tree);
-
-            // Find abstract classes
-
-            var objectType = compilation.GetTypeByMetadataName("System.Object");
-
-            var genericClassFinder = new GenericClassFinder(tree, semanticModel);
-            var classDeclarations = genericClassFinder.Get();
-
-            SyntaxNode newTree = tree.GetRoot();
-            // Find reference to it's members
-
-            // properties symbols
-            var propertiesToCast = classDeclarations
-                .SelectMany(x => x.Members)
-                .OfType<BasePropertyDeclarationSyntax>()
-                .Select(x => (IPropertySymbol)semanticModel.GetDeclaredSymbol(x));
-
-            var memberCasts = GetCastedReferences(newTree, semanticModel, propertiesToCast);
-            var genericChanges = ChangeGenericClasses(newTree, semanticModel, objectType);
-
-            var allChanges = memberCasts.Concat(genericChanges).ToDictionary(x => x.Key, x => x.Value);
-
-            var replaces = allChanges.Where(x => x.Value != null).ToDictionary(x => x.Key, x => x.Value);
-
-            var newTree2 = newTree.ReplaceNodes(replaces.Keys, (x, y) => allChanges[x]);
-
-            var newTree4 = new RemoveGenericNames().Visit(new RemoveGenericClass().Visit(newTree2));
+            var newTree4 = Do(compilation).ToArray();
 
             Assert.AreEqual(result, newTree4.ToString());
+        }
 
+        private static IEnumerable<SyntaxNode> Do(Compilation compilation)
+        {
+            var objectType = compilation.GetTypeByMetadataName("System.Object");
+
+            // GetPropertiesToCast
+
+            var changes = GetCasts(compilation, objectType);
+
+            foreach (var treeGroup in changes.GroupBy(x => x.Key.SyntaxTree))
+            {
+                var has = treeGroup.Key.GetRoot().DescendantNodes().Contains(changes.Single().Key);
+
+                var replaceNodes = treeGroup.Select(x => x.Key).ToArray();
+
+                var newTree2 = treeGroup.Key.GetRoot().ReplaceNodes(replaceNodes, (x, y) => changes[x]);
+
+                var clean = new RemoveGenericNames().Visit(new RemoveGenericClass().Visit(newTree2));
+
+                yield return clean;
+            }
+
+
+
+            // Cast
+
+            // Remove generics
+
+
+            //foreach (var tree in compilation.SyntaxTrees)
+            //{
+            //    var semanticModel = compilation.GetSemanticModel(tree);
+
+            //    // Find abstract classes
+
+
+            //    var genericClassFinder = new GenericClassFinder(tree, semanticModel);
+            //    var classDeclarations = genericClassFinder.Get();
+
+            //    SyntaxNode newTree = tree.GetRoot();
+            //    // Find reference to it's members
+
+            //    // properties symbols
+            //    var propertiesToCast = classDeclarations
+            //        .SelectMany(x => x.Members)
+            //        .OfType<BasePropertyDeclarationSyntax>()
+            //        .Select(x => (IPropertySymbol)semanticModel.GetDeclaredSymbol(x));
+
+            //    var memberCasts = GetCastedReferences(newTree, semanticModel, propertiesToCast);
+            //    var genericChanges = ChangeGenericClasses(newTree, semanticModel, objectType);
+
+            //    var allChanges = memberCasts.Concat(genericChanges).ToDictionary(x => x.Key, x => x.Value);
+
+            //    var newTree2 = newTree.ReplaceNodes(allChanges.Keys, (x, y) => allChanges[x]);
+
+            //    var newTree4 = new RemoveGenericNames().Visit(new RemoveGenericClass().Visit(newTree2));
+
+            //    yield return newTree4;
+            //}
+        }
+
+        private static IDictionary<SyntaxNode, SyntaxNode> GetCasts(Compilation compilation, INamedTypeSymbol objectType)
+        {
+            var syntaxNodes = new Dictionary<SyntaxNode, SyntaxNode>();
+
+            var castProperties = new List<IPropertySymbol>();
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                // Find abstract classes
+
+                var genericClassFinder = new GenericClassFinder(tree, semanticModel);
+                var classDeclarations = genericClassFinder.Get();
+
+                SyntaxNode newTree = tree.GetRoot();
+                // Find reference to it's members
+
+                // properties symbols
+                var propertiesToCast = classDeclarations
+                    .SelectMany(x => x.Members)
+                    .OfType<BasePropertyDeclarationSyntax>()
+                    .Select(x => (IPropertySymbol)semanticModel.GetDeclaredSymbol(x));
+
+                castProperties.AddRange(propertiesToCast);
+            }
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                var memberCasts = GetCastedReferences(tree.GetRoot(), semanticModel, castProperties);
+                //var genericChanges = ChangeGenericClasses(newTree, semanticModel, objectType);
+
+                //var allChanges = memberCasts.Concat(genericChanges);
+
+                foreach (var ch in memberCasts)
+                    syntaxNodes.Add(ch.Key, ch.Value);
+            }
+
+            return syntaxNodes;
         }
 
         private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> GetCastedReferences(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<IPropertySymbol> properties)
@@ -151,11 +251,6 @@ namespace Netmf.Plus.Tests
 
                     yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node.Type, typeSynax);
                 }
-            }
-
-            foreach (var node in tree.DescendantNodes().OfType<TypeParameterListSyntax>())
-            {
-                yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node, null);
             }
         }
     }
