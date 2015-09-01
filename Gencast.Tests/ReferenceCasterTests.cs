@@ -72,7 +72,7 @@ namespace Netmf.Plus.Tests
 
             var ws = MSBuildWorkspace.Create();
 
-            var open = ws.OpenSolutionAsync(@"..\..\sample\Solution1\Solution1.sln");
+            var open = ws.OpenSolutionAsync(@"sample\Solution1\Solution1.sln");
 
             open.Wait();
 
@@ -100,13 +100,35 @@ namespace Netmf.Plus.Tests
 
             // 3. Take the Semantic model of compiled tree
 
-            var newTree4 = Do(compilation).ToArray();
+            var newTree4 = Do(prj).ToArray();
+
+            Project nPrj = prj;
+
+            foreach (var newDoc in newTree4)
+            {
+                var doc = nPrj.GetDocument(newDoc.Item2);
+
+                nPrj = nPrj.RemoveDocument(newDoc.Item2);
+
+                var nd = nPrj.AddDocument(doc.Name, newDoc.Item1, doc.Folders, doc.FilePath);
+                nPrj = nd.Project;
+            }
+
+            if (nPrj != prj)
+            {
+                ws.TryApplyChanges(nPrj.Solution);
+            }
 
             Assert.AreEqual(result, newTree4.ToString());
+
+
         }
 
-        private static IEnumerable<SyntaxNode> Do(Compilation compilation)
+        private static IEnumerable<Tuple<SyntaxNode, DocumentId>> Do(Project prj)
         {
+            var getCompilation = prj.GetCompilationAsync();
+            getCompilation.Wait();
+            var compilation = getCompilation.Result;
             var objectType = compilation.GetTypeByMetadataName("System.Object");
 
             // GetPropertiesToCast
@@ -115,6 +137,8 @@ namespace Netmf.Plus.Tests
 
             foreach (var treeGroup in changes.GroupBy(x => x.Key.SyntaxTree))
             {
+                var docId = prj.GetDocumentId(treeGroup.Key);
+
                 var has = treeGroup.Key.GetRoot().DescendantNodes().Contains(changes.Single().Key);
 
                 var replaceNodes = treeGroup.Select(x => x.Key).ToArray();
@@ -123,7 +147,7 @@ namespace Netmf.Plus.Tests
 
                 var clean = new RemoveGenericNames().Visit(new RemoveGenericClass().Visit(newTree2));
 
-                yield return clean;
+                yield return new Tuple<SyntaxNode, DocumentId>(clean, docId);
             }
 
 

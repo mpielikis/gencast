@@ -96,9 +96,15 @@
     <Compile Include="Helpers.cs" />
     <Compile Include="ReferenceCasterTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Content Include="sample\Solution1\Project1\A.cs" />
-    <Content Include="sample\Solution1\Project1\Program.cs" />
-    <Content Include="sample\Solution1\Project1\Properties\AssemblyInfo.cs" />
+    <Content Include="sample\Solution1\Project1\A.cs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="sample\Solution1\Project1\Program.cs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="sample\Solution1\Project1\Properties\AssemblyInfo.cs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Compile Include="Sources\Class1.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -107,8 +113,12 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="sample\Solution1\Project1\Project1.csproj" />
-    <Content Include="sample\Solution1\Solution1.sln" />
+    <Content Include="sample\Solution1\Project1\Project1.csproj">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="sample\Solution1\Solution1.sln">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
