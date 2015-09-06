@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace Netmf.Plus.Tests
+namespace Gencast.Tests
 {
     [TestFixture]
     class GenericClassFinderTests

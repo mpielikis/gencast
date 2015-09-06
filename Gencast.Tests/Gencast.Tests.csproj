@@ -92,18 +92,19 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Generator.cs" />
     <Compile Include="GenericClassFinderTests.cs" />
     <Compile Include="Helpers.cs" />
     <Compile Include="ReferenceCasterTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Content Include="sample\Solution1\Project1\A.cs">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="sample\Solution1\Project1\Program.cs">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="sample\Solution1\Project1\Properties\AssemblyInfo.cs">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Compile Include="Sources\Class1.cs" />
   </ItemGroup>
