@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,11 +15,10 @@ namespace Gencast.Tests
         public static async Task<Project> MakeRetro(Project prj)
         {
             var compilation = await prj.GetCompilationAsync();
-            var objectType = compilation.GetTypeByMetadataName("System.Object");
-
+            
             // GetPropertiesToCast
 
-            var changedDocuments = MakeChanges(compilation, objectType);
+            var changedDocuments = MakeChanges(compilation);
 
             Project nPrj = prj;
 
@@ -36,8 +36,9 @@ namespace Gencast.Tests
             return nPrj;
         }
 
-        private static IEnumerable<Tuple<SyntaxTree, SyntaxNode>> MakeChanges(Compilation compilation, INamedTypeSymbol objectType)
+        public static IEnumerable<Tuple<SyntaxTree, SyntaxNode>> MakeChanges(Compilation compilation)
         {
+            var objectType = compilation.GetTypeByMetadataName("System.Object");
             var changedNodes = new List<Tuple<SyntaxTree, SyntaxNode>>();
 
             var changes = GetChanges(compilation, objectType);
@@ -95,7 +96,10 @@ namespace Gencast.Tests
                 var root = tree.GetRoot();
                 var semanticModel = compilation.GetSemanticModel(tree);
 
-                var castReferences = FindReferencesAndCast(root, semanticModel, genericProperties);
+                var castReferences = new Dictionary<SyntaxNode, SyntaxNode>();
+
+                var catedRoot = CastResursive(root, semanticModel, genericProperties, castReferences);
+                 
                 var retroProperties = GenericPropertiesToObject(root, semanticModel, objectType);
 
                 var allChanges = castReferences.Concat(retroProperties);
@@ -107,18 +111,74 @@ namespace Gencast.Tests
             return syntaxNodes;
         }
 
-        private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> FindReferencesAndCast(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<IPropertySymbol> properties)
-        {
-            foreach (var node in tree.DescendantNodes().OfType<MemberAccessExpressionSyntax>().Where(x => x.Parent is ArgumentSyntax))
-            {
-                ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+        //private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> FindReferencesAndCast(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<IPropertySymbol> properties)
+        //{
+        //    foreach (var node in tree.ChildNodes().OfType<MemberAccessExpressionSyntax>().Where(x => !(x.Parent is AssignmentExpressionSyntax)))
+        //    {
+        //        ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
 
-                if (properties.Any(x => x == invokedSymbol.OriginalDefinition))
+        //        if (properties.Any(x => x == invokedSymbol.OriginalDefinition))
+        //        {
+        //            Debug.Print(node.ToString());
+        //            Debug.Print("<" + node.Parent.ToString() + ">");
+
+        //            //var castEx = Helpers.CastTo(node, ((IPropertySymbol)invokedSymbol).Type);
+
+        //            var castEx = CastResursive(node, semanticModel, properties, ((IPropertySymbol)invokedSymbol).Type);
+
+        //            yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node, castEx);
+        //        }
+        //    }
+        //}
+
+        private static SyntaxNode CastResursive(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<IPropertySymbol> properties, Dictionary<SyntaxNode, SyntaxNode> castChanges)
+        {
+            var change = new Dictionary<SyntaxNode, SyntaxNode>();
+
+            foreach (var node in tree.ChildNodes())
+            {
+                // .OfType<MemberAccessExpressionSyntax>().Where(x => !(x.Parent is AssignmentExpressionSyntax))
+
+                ITypeSymbol ts = null;
+
+                if ((node is MemberAccessExpressionSyntax) && !(node.Parent is AssignmentExpressionSyntax))
                 {
-                    var castEx = Helpers.CastTo(node, ((IPropertySymbol)invokedSymbol).Type);
-                    yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node, castEx);
+                    ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+
+                    // if is generic property
+
+                    if (properties.Any(x => x == invokedSymbol.OriginalDefinition))
+                    {
+                        ts = ((IPropertySymbol)invokedSymbol).Type;                        
+                    }
+
                 }
+
+                // recurse for changed node
+                // do cast
+
+                var casted = CastResursive(node, semanticModel, properties, castChanges);
+
+                if (ts != null)
+                {
+                    Debug.Print("cast " + node.ToString() + " to " + ts);
+                    casted = Helpers.CastTo((ExpressionSyntax)casted, ts);
+
+                    if (node.Parent is MemberAccessExpressionSyntax)
+                        casted = ((ExpressionSyntax)casted).Parenthesize();
+
+                    castChanges.Add(node, casted);
+                }
+
+                // add for replace
+                if (node != casted)
+                    change.Add(node, casted);
             }
+
+            if (change.Any())
+                tree = tree.ReplaceNodes(change.Keys, (x, y) => change[x]);
+
+            return tree;
         }
 
         private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> GenericPropertiesToObject(SyntaxNode tree, SemanticModel semanticModel, INamedTypeSymbol symbol)

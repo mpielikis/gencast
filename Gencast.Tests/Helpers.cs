@@ -21,9 +21,12 @@ namespace Gencast.Tests
 
         public static CastExpressionSyntax CastTo(this ExpressionSyntax expression, ITypeSymbol type)
         {
+            var trivia = expression.GetLeadingTrivia();
+
             return SyntaxFactory.CastExpression(
                 type: SyntaxFactory.ParseTypeName(type.ToDisplayString()),
-                expression: expression.ParenthesizeIfNeeded());
+                expression: expression.WithoutLeadingTrivia().ParenthesizeIfNeeded())
+                .WithLeadingTrivia(trivia);
         }
 
         public static ExpressionSyntax ParenthesizeIfNeeded(this ExpressionSyntax expression)
@@ -41,7 +44,9 @@ namespace Gencast.Tests
 
         public static ExpressionSyntax Parenthesize(this ExpressionSyntax expression)
         {
-            return SyntaxFactory.ParenthesizedExpression(expression: expression);
+            var trivia = expression.GetLeadingTrivia();
+            return SyntaxFactory.ParenthesizedExpression(expression: expression.WithoutLeadingTrivia())
+                .WithLeadingTrivia(trivia);
         }
     }
 }
