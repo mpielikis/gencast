@@ -11,7 +11,6 @@ using System.Threading.Tasks;
 
 namespace Gencast.Tests
 {
-    [TestFixture]
     public class ReferenceCasterTests
     {
         [Test]
@@ -135,10 +134,10 @@ namespace Gencast.Tests
                              var a = new A();
 
                              a.A = new B();
-                             ((B)a.A).A = ""Hello, World!"";
+                             ((HelloWorld.B)a.A).A = ""Hello, World!"";
 
-                             Console.WriteLine((string)((B)a.A).A);
-                             Console.WriteLine((string)((B)a.B).B);
+                             Console.WriteLine((string)((HelloWorld.B)a.A).A);
+                             Console.WriteLine((string)((HelloWorld.B)a.B).B);
                          } 
                      } 
                  }";
@@ -234,31 +233,9 @@ namespace Gencast.Tests
 
 
 
-    public class RemoveGenericNames : CSharpSyntaxRewriter
-    {
-        public override SyntaxNode VisitGenericName(GenericNameSyntax node)
-        {
-            var typeArgument = node.ChildNodes().OfType<TypeArgumentListSyntax>();
 
-            if (typeArgument.Any())
-                return SyntaxFactory.IdentifierName(node.Identifier);
 
-            return node;
-        }
-    }
 
-    public class RemoveGenericClass : CSharpSyntaxRewriter
-    {
-        public override SyntaxNode VisitClassDeclaration(ClassDeclarationSyntax node)
-        {
-            var typeList = node.ChildNodes().OfType<TypeParameterListSyntax>();
-
-            if (typeList.Any())
-                return node.RemoveNodes(typeList, SyntaxRemoveOptions.KeepEndOfLine);
-
-            return node;
-        }
-    }
   
     public class MemberReferenceCaster : CSharpSyntaxRewriter
     {

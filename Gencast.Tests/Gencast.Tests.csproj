@@ -92,9 +92,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Generator.cs" />
-    <Compile Include="GenericClassFinderTests.cs" />
-    <Compile Include="Helpers.cs" />
     <Compile Include="ReferenceCasterTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Content Include="sample\Solution1\Project1\A.cs">
@@ -106,7 +103,6 @@
     <Content Include="sample\Solution1\Project1\Properties\AssemblyInfo.cs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Compile Include="Sources\Class1.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config">
@@ -120,6 +116,12 @@
     <Content Include="sample\Solution1\Solution1.sln">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Gencast\Gencast.csproj">
+      <Project>{d0fdb216-ad15-4b86-a408-5d04069d2f7d}</Project>
+      <Name>Gencast</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

@@ -8,9 +8,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("Netmf.Plus.Tests")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Elgama Sistemos")]
 [assembly: AssemblyProduct("Netmf.Plus.Tests")]
-[assembly: AssemblyCopyright("Copyright © Elgama Sistemos 2013")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
