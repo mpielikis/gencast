@@ -40,24 +40,28 @@ namespace Gencast.Tests
         public static IEnumerable<Tuple<SyntaxTree, SyntaxNode>> MakeChanges(Compilation compilation)
         {
             var objectType = compilation.GetTypeByMetadataName("System.Object");
+
             var changedNodes = new List<Tuple<SyntaxTree, SyntaxNode>>();
 
-            var changes = GetChanges(compilation, objectType);
+            // get changes for retro properties
+            var changes = GetRetroProperties(compilation, objectType);
 
+            // apply changes and remove generics by syntax tree
             foreach (var treeGroup in changes.GroupBy(x => x.Key.SyntaxTree))
             {
                 var root = treeGroup.Key.GetRoot();
 
                 var treeAfterReplace = root.ReplaceNodes(treeGroup.Select(x => x.Key), (x, y) => changes[x]);
 
-                var clean = new RemoveGenericNames().Visit(new RemoveGenericClass().Visit(treeAfterReplace));
+                var clean = new RemoveGenericNames().Visit(
+                    new RemoveGenericClass().Visit(treeAfterReplace));
 
                 yield return new Tuple<SyntaxTree, SyntaxNode>(treeGroup.Key, clean);
             }
 
         }
 
-        private static IDictionary<SyntaxNode, SyntaxNode> GetChanges(Compilation compilation, INamedTypeSymbol objectType)
+        private static IDictionary<SyntaxNode, SyntaxNode> GetRetroProperties(Compilation compilation, INamedTypeSymbol objectType)
         {
             var syntaxNodes = new Dictionary<SyntaxNode, SyntaxNode>();
 
@@ -97,10 +101,11 @@ namespace Gencast.Tests
                 var root = tree.GetRoot();
                 var semanticModel = compilation.GetSemanticModel(tree);
 
+                // get cast changes
                 var castReferences = new Dictionary<SyntaxNode, SyntaxNode>();
-
-                var catedRoot = CastResursive(root, semanticModel, genericProperties, castReferences);
+                CastResursive(root, semanticModel, genericProperties, castReferences);
                  
+                // get generic properties to object properties
                 var retroProperties = GenericPropertiesToObject(root, semanticModel, objectType);
 
                 var allChanges = castReferences.Concat(retroProperties);
@@ -112,34 +117,12 @@ namespace Gencast.Tests
             return syntaxNodes;
         }
 
-        //private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> FindReferencesAndCast(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<IPropertySymbol> properties)
-        //{
-        //    foreach (var node in tree.ChildNodes().OfType<MemberAccessExpressionSyntax>().Where(x => !(x.Parent is AssignmentExpressionSyntax)))
-        //    {
-        //        ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
-
-        //        if (properties.Any(x => x == invokedSymbol.OriginalDefinition))
-        //        {
-        //            Debug.Print(node.ToString());
-        //            Debug.Print("<" + node.Parent.ToString() + ">");
-
-        //            //var castEx = Helpers.CastTo(node, ((IPropertySymbol)invokedSymbol).Type);
-
-        //            var castEx = CastResursive(node, semanticModel, properties, ((IPropertySymbol)invokedSymbol).Type);
-
-        //            yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node, castEx);
-        //        }
-        //    }
-        //}
-
         private static SyntaxNode CastResursive(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<IPropertySymbol> properties, Dictionary<SyntaxNode, SyntaxNode> castChanges)
         {
             var change = new Dictionary<SyntaxNode, SyntaxNode>();
 
             foreach (var node in tree.ChildNodes())
             {
-                // .OfType<MemberAccessExpressionSyntax>().Where(x => !(x.Parent is AssignmentExpressionSyntax))
-
                 ITypeSymbol ts = null;
 
                 if ((node is MemberAccessExpressionSyntax) && !(node.Parent is AssignmentExpressionSyntax))
@@ -147,22 +130,18 @@ namespace Gencast.Tests
                     ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
 
                     // if is generic property
-
                     if (properties.Any(x => x == invokedSymbol.OriginalDefinition))
                     {
                         ts = ((IPropertySymbol)invokedSymbol).Type;                        
                     }
-
                 }
 
                 // recurse for changed node
-                // do cast
-
                 var casted = CastResursive(node, semanticModel, properties, castChanges);
 
                 if (ts != null)
                 {
-                    Debug.Print("cast " + node.ToString() + " to " + ts);
+                    // do cast
                     casted = Helpers.CastTo((ExpressionSyntax)casted, ts);
 
                     if (node.Parent is MemberAccessExpressionSyntax)

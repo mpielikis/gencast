@@ -11,10 +11,10 @@ using System.Threading.Tasks;
 
 namespace Gencast.Tests
 {
-    public class ReferenceCasterTests
+    public class RetroPropertiesTests
     {
         [Test]
-        public void A()
+        public void Property_Cast()
         {
             string source =@"
                  using System; 
@@ -76,7 +76,7 @@ namespace Gencast.Tests
         }
 
         [Test]
-        public void B()
+        public void Property_ResursiveCast()
         {
             string source = @"
                  using System; 
@@ -150,7 +150,7 @@ namespace Gencast.Tests
         }
 
         [Test]
-        public void C()
+        public void Property_SimpleRecursiveCast()
         {
             string source = @"using System;
 
@@ -205,129 +205,6 @@ namespace Gencast.Tests
                 .AddSyntaxTrees(tree);
 
             return compilation;
-        }
-
-        [Test]
-        public void FullTest()
-        {
-            var assemblyPath = Path.GetDirectoryName(typeof(object).Assembly.Location);
-
-            var ws = MSBuildWorkspace.Create();
-
-            var open = ws.OpenSolutionAsync(@"sample\Solution1\Solution1.sln");
-            open.Wait();
-            var solution = open.Result;
-
-            var prj = solution.Projects.Single(x => x.Name == "Project1");
-
-            var retro = Generator.MakeRetro(prj);
-
-            retro.Wait();
-
-            var retroProject = retro.Result;
-
-            if (retroProject != prj)
-                ws.TryApplyChanges(retroProject.Solution);
-        }
-    }
-
-
-
-
-
-
-  
-    public class MemberReferenceCaster : CSharpSyntaxRewriter
-    {
-        private readonly SemanticModel semanticModel;
-        private readonly IEnumerable<IPropertySymbol> properties;
-
-        public MemberReferenceCaster(IEnumerable<IPropertySymbol> properties, SemanticModel semanticModel)
-        {
-            this.properties = properties;
-            this.semanticModel = semanticModel;
-        }
-
-        public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
-        {
-            if (node.Parent is ArgumentSyntax)
-            {
-                ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
-
-                if (properties.Any(x => x == invokedSymbol.OriginalDefinition))
-                {
-                    var castEx = Helpers.CastTo(node, ((IPropertySymbol)invokedSymbol).Type);
-                    return castEx;
-                }
-            }
-
-            return node;
-        }
-    }
-
-    public class ClassMembersRewriter : CSharpSyntaxRewriter
-    {
-        private readonly SemanticModel semanticModel;
-        private readonly IEnumerable<ITypeParameterSymbol> typeParameters;
-
-        private readonly INamedTypeSymbol symbol;
-
-        public ClassMembersRewriter(SemanticModel semanticModel, IEnumerable<ITypeParameterSymbol> typeParameters, INamedTypeSymbol symbol)
-        {
-            this.symbol = symbol;
-            this.typeParameters = typeParameters;
-            this.semanticModel = semanticModel;
-        }
-
-        public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
-        {
-            var s = semanticModel.GetDeclaredSymbol(node);
-
-            if (typeParameters.Any(x => x == s.Type))
-            {
-                var typeSynax = SyntaxFactory.IdentifierName(symbol.ToDisplayString())
-                            .WithTrailingTrivia(node.Type.GetTrailingTrivia());
-
-                return node.ReplaceNode(node.Type, typeSynax);
-            }
-
-            return node;
-        }
-    }
-    
-    public class GenericMembersToObjectRewriter : CSharpSyntaxRewriter
-    {
-        private readonly SemanticModel semanticModel;
-
-        private readonly INamedTypeSymbol symbol;
-
-        public GenericMembersToObjectRewriter(SemanticModel semanticModel, INamedTypeSymbol symbol)
-        {
-            this.symbol = symbol;
-            this.semanticModel = semanticModel;
-        }
-
-        public override SyntaxNode VisitClassDeclaration(ClassDeclarationSyntax node)
-        {
-            var info = semanticModel.GetDeclaredSymbol(node);
-
-            // If class is generic
-
-            if (info.IsGenericType)
-            {
-                var classMemberRewriter = new ClassMembersRewriter(
-                    semanticModel, 
-                    info.TypeParameters.ToArray(), 
-                    symbol);
-
-                return classMemberRewriter.Visit(node);
-
-                //var a = newCls.ChildNodes().First();
-                //newCls = newCls.RemoveNode(a, SyntaxRemoveOptions.KeepExteriorTrivia);
-                //return newCls;
-            }
-
-            return node;
         }
     }
 }
