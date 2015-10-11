@@ -13,6 +13,8 @@ namespace Gencast.Tests
 {
     public class RetroPropertiesTests
     {
+        // ADD test with not generic propery
+
         [Test]
         public void Property_Cast()
         {

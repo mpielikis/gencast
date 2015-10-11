@@ -59,17 +59,94 @@ namespace Gencast.Tests
                 yield return new Tuple<SyntaxTree, SyntaxNode>(treeGroup.Key, clean);
             }
 
+            // get changes for retro methods
+            var methodChanges = GetRetroMethods(compilation, objectType);
+
+            // apply changes and remove generics by syntax tree
+            foreach (var treeGroup in methodChanges.GroupBy(x => x.Key.SyntaxTree))
+            {
+                var root = treeGroup.Key.GetRoot();
+
+                var treeAfterReplace = root.ReplaceNodes(treeGroup.Select(x => x.Key), (x, y) => methodChanges[x]);
+
+                var clean = new RemoveGenericNames().Visit(
+                    new RemoveGenericClass().Visit(treeAfterReplace));
+
+                yield return new Tuple<SyntaxTree, SyntaxNode>(treeGroup.Key, clean);
+            }
+
+        }
+
+        private static IDictionary<SyntaxNode, SyntaxNode> GetRetroMethods(Compilation compilation, INamedTypeSymbol objectType)
+        {
+            var syntaxNodes = new Dictionary<SyntaxNode, SyntaxNode>();
+
+            // FIND
+            // 1. Generic properties symbols
+            // =============================
+
+            // NOTE -
+            var genericMethodsList = new List<IMethodSymbol>();
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                // Find generic classes
+                var genericClassFinder = new GenericClassFinder(tree, semanticModel);
+                var classDeclarations = genericClassFinder.Get().ToArray();
+
+                SyntaxNode newTree = tree.GetRoot();
+                // Find reference to it's members
+
+                // methods symbols
+                var methodsToCast = classDeclarations
+                    .SelectMany(x => x.Members)
+                    .OfType<BaseMethodDeclarationSyntax>()
+                    .Select(x => (IMethodSymbol)semanticModel.GetDeclaredSymbol(x));
+
+                genericMethodsList.AddRange(methodsToCast);
+            }
+
+            var genericMethods = new HashSet<ISymbol>(genericMethodsList);
+
+             //CHANGE
+             //1. Generic properties references with cast
+             //2. Generic properties to Object properties
+             //======
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                var root = tree.GetRoot();
+
+                // NOTE semantic model is taken for the second time
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                // get cast changes
+                var castReferences = new Dictionary<SyntaxNode, SyntaxNode>();
+                CastResursiveMethod(root, semanticModel, genericMethods, castReferences);
+                
+                // get generic properties to object properties
+                var retroProperties = GenericPropertiesToObject(root, semanticModel, objectType);
+
+                var allChanges = castReferences.Concat(retroProperties);
+
+                foreach (var ch in allChanges)
+                    syntaxNodes.Add(ch.Key, ch.Value);
+            }
+
+            return syntaxNodes;
         }
 
         private static IDictionary<SyntaxNode, SyntaxNode> GetRetroProperties(Compilation compilation, INamedTypeSymbol objectType)
         {
             var syntaxNodes = new Dictionary<SyntaxNode, SyntaxNode>();
 
-            var genericProperties = new List<IPropertySymbol>();
-
             // FIND
             // 1. Generic properties symbols
             // =============================
+
+            var genericProperties = new List<IPropertySymbol>();
 
             foreach (var tree in compilation.SyntaxTrees)
             {
@@ -117,6 +194,52 @@ namespace Gencast.Tests
             return syntaxNodes;
         }
 
+        private static SyntaxNode CastResursiveMethod(SyntaxNode tree, SemanticModel semanticModel, HashSet<ISymbol> methods, Dictionary<SyntaxNode, SyntaxNode> castChanges)
+        {
+            var change = new Dictionary<SyntaxNode, SyntaxNode>();
+
+            foreach (var node in tree.ChildNodes())
+            {
+                ITypeSymbol ts = null;
+                
+                // if invocation -> ITypeSymbol
+                // -------------------------
+                if (node is InvocationExpressionSyntax)
+                {
+                    ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+
+                    // if is generic property
+                    if (methods.Contains(invokedSymbol.OriginalDefinition))
+                    {
+                        ts = ((IMethodSymbol)invokedSymbol).ReturnType;                        
+                    }
+                }
+
+                // recurse for changed node
+                var casted = CastResursiveMethod(node, semanticModel, methods, castChanges);
+
+                if (ts != null)
+                {
+                    // do cast
+                    casted = Helpers.CastTo((ExpressionSyntax)casted, ts);
+
+                    if (node.Parent is MemberAccessExpressionSyntax)
+                        casted = ((ExpressionSyntax)casted).Parenthesize();
+
+                    castChanges.Add(node, casted);
+                }
+
+                // add for replace
+                if (node != casted)
+                    change.Add(node, casted);
+            }
+
+            if (change.Any())
+                tree = tree.ReplaceNodes(change.Keys, (x, y) => change[x]);
+
+            return tree;
+        }
+
         private static SyntaxNode CastResursive(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<IPropertySymbol> properties, Dictionary<SyntaxNode, SyntaxNode> castChanges)
         {
             var change = new Dictionary<SyntaxNode, SyntaxNode>();
@@ -125,6 +248,8 @@ namespace Gencast.Tests
             {
                 ITypeSymbol ts = null;
 
+                // invocation
+                // ----------
                 if ((node is MemberAccessExpressionSyntax) && !(node.Parent is AssignmentExpressionSyntax))
                 {
                     ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
@@ -189,6 +314,32 @@ namespace Gencast.Tests
                                 .WithTrailingTrivia(node.Type.GetTrailingTrivia());
 
                     yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node.Type, typeSynax);
+                }
+            }
+
+            foreach (var node in tree.DescendantNodes().OfType<MethodDeclarationSyntax>())
+            {
+                var s = (IMethodSymbol)semanticModel.GetDeclaredSymbol(node);
+
+                if (typeParameters.Any(x => x == s.ReturnType))
+                {
+                    var typeSynax = SyntaxFactory.IdentifierName(symbol.ToDisplayString())
+                                .WithTrailingTrivia(node.ReturnType.GetTrailingTrivia());
+
+                    yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node.ReturnType, typeSynax);
+                }
+
+                foreach (var p in node.ParameterList.Parameters)
+                {
+                    var ps = semanticModel.GetDeclaredSymbol(p);
+
+                    if (typeParameters.Any(x => x == ps.Type))
+                    {
+                        var typeSynax = SyntaxFactory.IdentifierName(symbol.ToDisplayString())
+                                .WithTrailingTrivia(p.Type.GetTrailingTrivia());
+
+                        yield return new KeyValuePair<SyntaxNode, SyntaxNode>(p.Type, typeSynax);
+                    }
                 }
             }
         }
