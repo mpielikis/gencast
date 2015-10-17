@@ -131,7 +131,7 @@ namespace Gencast.Tests
                 CastResursiveMethod(root, semanticModel, genRefs, castReferences);
                 
                 // get generic properties to object properties
-                var retroProperties = GenericPropertiesToObject(root, semanticModel, objectType);
+                var retroProperties = GenericToObject(root, semanticModel, objectType);
 
                 var allChanges = castReferences.Concat(retroProperties);
 
@@ -156,7 +156,7 @@ namespace Gencast.Tests
                 {
                     ISymbol invokedSymbol = semanticModel.GetSymbolInfo(node).Symbol;
 
-                    // if is generic property
+                    // if is generic method
                     if (genRef.Methods.Contains(invokedSymbol.OriginalDefinition))
                     {
                         ts = ((IMethodSymbol)invokedSymbol).ReturnType;                        
@@ -198,7 +198,7 @@ namespace Gencast.Tests
             return tree;
         }
 
-        private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> GenericPropertiesToObject(SyntaxNode tree, SemanticModel semanticModel, INamedTypeSymbol symbol)
+        private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> GenericToObject(SyntaxNode tree, SemanticModel semanticModel, INamedTypeSymbol symbol)
         {
             foreach (var node in tree.DescendantNodes().OfType<ClassDeclarationSyntax>())
             {
@@ -216,42 +216,17 @@ namespace Gencast.Tests
 
         private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> GetCleanedGenericClass(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<ITypeParameterSymbol> typeParameters, INamedTypeSymbol symbol)
         {
-            foreach (var node in tree.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+            foreach (var node in tree.DescendantNodes().OfType<IdentifierNameSyntax>())
             {
-                var s = semanticModel.GetDeclaredSymbol(node);
+                var s = semanticModel.GetSymbolInfo(node);
 
-                if (typeParameters.Any(x => x == s.Type))
+                if (typeParameters.Any(x => x == s.Symbol))
                 {
                     var typeSynax = SyntaxFactory.IdentifierName(symbol.ToDisplayString())
-                                .WithTrailingTrivia(node.Type.GetTrailingTrivia());
+                                .WithLeadingTrivia(node.GetLeadingTrivia())
+                                .WithTrailingTrivia(node.GetTrailingTrivia());
 
-                    yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node.Type, typeSynax);
-                }
-            }
-
-            foreach (var node in tree.DescendantNodes().OfType<MethodDeclarationSyntax>())
-            {
-                var s = (IMethodSymbol)semanticModel.GetDeclaredSymbol(node);
-
-                if (typeParameters.Any(x => x == s.ReturnType))
-                {
-                    var typeSynax = SyntaxFactory.IdentifierName(symbol.ToDisplayString())
-                                .WithTrailingTrivia(node.ReturnType.GetTrailingTrivia());
-
-                    yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node.ReturnType, typeSynax);
-                }
-
-                foreach (var p in node.ParameterList.Parameters)
-                {
-                    var ps = semanticModel.GetDeclaredSymbol(p);
-
-                    if (typeParameters.Any(x => x == ps.Type))
-                    {
-                        var typeSynax = SyntaxFactory.IdentifierName(symbol.ToDisplayString())
-                                .WithTrailingTrivia(p.Type.GetTrailingTrivia());
-
-                        yield return new KeyValuePair<SyntaxNode, SyntaxNode>(p.Type, typeSynax);
-                    }
+                    yield return new KeyValuePair<SyntaxNode, SyntaxNode>(node, typeSynax);
                 }
             }
         }
