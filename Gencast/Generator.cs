@@ -1,5 +1,4 @@
-﻿using ConsoleApplication1;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
@@ -9,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Gencast.Tests
+namespace Gencast
 {
     class GenRef
     {
@@ -208,19 +207,21 @@ namespace Gencast.Tests
 
                 if (info.IsGenericType)
                 {
-                    foreach (var changedPart in GetCleanedGenericClass(node, semanticModel, info.TypeParameters.ToArray(), symbol))
+                    var typeParameters = new HashSet<ITypeParameterSymbol>(info.TypeParameters);
+
+                    foreach (var changedPart in GetCleanedGenericClass(node, semanticModel, typeParameters, symbol))
                         yield return changedPart;
                 }
             }
         }
 
-        private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> GetCleanedGenericClass(SyntaxNode tree, SemanticModel semanticModel, IEnumerable<ITypeParameterSymbol> typeParameters, INamedTypeSymbol symbol)
+        private static IEnumerable<KeyValuePair<SyntaxNode, SyntaxNode>> GetCleanedGenericClass(SyntaxNode tree, SemanticModel semanticModel, ISet<ITypeParameterSymbol> typeParameters, INamedTypeSymbol symbol)
         {
             foreach (var node in tree.DescendantNodes().OfType<IdentifierNameSyntax>())
             {
                 var s = semanticModel.GetSymbolInfo(node);
 
-                if (typeParameters.Any(x => x == s.Symbol))
+                if (typeParameters.Contains(s.Symbol))
                 {
                     var typeSynax = SyntaxFactory.IdentifierName(symbol.ToDisplayString())
                                 .WithLeadingTrivia(node.GetLeadingTrivia())
